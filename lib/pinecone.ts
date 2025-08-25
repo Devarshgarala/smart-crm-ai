@@ -1,33 +1,40 @@
-import { Pinecone } from "@pinecone-database/pinecone";
 import OpenAI from "openai";
+import { Pinecone } from "@pinecone-database/pinecone";
 
-const client = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY!,
-});
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error("Missing OPENAI_API_KEY in environment variables");
+}
+if (!process.env.PINECONE_API_KEY) {
+  throw new Error("Missing PINECONE_API_KEY in environment variables");
+}
 
-const index = client.index(process.env.PINECONE_INDEX!);
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! }); // non-null assertion
 
-export async function embedAndUpsertDeal(deal: { id: string; title: string; value: number; stage: string }) {
-  // create text for embedding
-  const text = `Deal: ${deal.title}, Value: ${deal.value}, Stage: ${deal.stage}`;
+const index = pc.index("deals-index"); // use your Pinecone index name
 
-  // generate embedding
+// Create embeddings and upsert to Pinecone
+export async function embedAndUpsertDeal(deal: any) {
+  const text = `${deal.title} ${deal.stage} ${deal.value}`;
   const embedding = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: text,
   });
 
-  // upsert into Pinecone
   await index.upsert([
     {
       id: deal.id,
       values: embedding.data[0].embedding,
       metadata: {
         title: deal.title,
-        value: deal.value,
         stage: deal.stage,
+        value: deal.value.toString(),
       },
     },
   ]);
+}
+
+// Delete from Pinecone
+export async function deleteDealFromPinecone(id: string) {
+  await index.deleteOne(id);
 }
